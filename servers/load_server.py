@@ -2,11 +2,21 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
 from typing import Any, Dict, List
 
 import pandas as pd
 from mcp.server.fastmcp import FastMCP
+
+
+def _sqlite_safe_column(name: str) -> str:
+    """Make a column name valid for SQLite (no ':', '@', or leading digits)."""
+    s = re.sub(r"[^\w]", "_", str(name).strip())
+    s = s.lstrip("_") or "unnamed"
+    if s[0].isdigit():
+        s = "c_" + s
+    return s or "unnamed"
 
 mcp = FastMCP("GainesvilleLoadServer")
 
@@ -23,6 +33,9 @@ def _ensure_dir(path: str) -> None:
 
 def _loads_rows(data: str) -> List[Dict[str, Any]]:
     obj = json.loads(data)
+    # Unwrap MCP-style {"result": "<json string>"} if present
+    if isinstance(obj, dict) and "result" in obj and isinstance(obj["result"], str):
+        obj = json.loads(obj["result"])
     if isinstance(obj, dict) and "rows" in obj and isinstance(obj["rows"], list):
         return obj["rows"]
     if isinstance(obj, list):
@@ -45,15 +58,32 @@ def save_to_sqlite(data: str, table_name: str) -> str:
     if df.empty:
         return json.dumps({"status": "ok", "saved_rows": 0, "table": table_name, "db": db})
 
-    # make columns sqlite-friendly
-    df.columns = [c.strip().replace(" ", "_") for c in df.columns]
+    # SQLite rejects column names with ':' (bind param) or '@'; sanitize to valid identifiers
+    df.columns = [_sqlite_safe_column(c) for c in df.columns]
+    # Ensure unique names (e.g. multiple columns could become "unnamed")
+    seen: Dict[str, int] = {}
+    new_cols = []
+    for c in df.columns:
+        key = c
+        seen[key] = seen.get(key, 0) + 1
+        new_cols.append(f"{c}_{seen[key]}" if seen[key] > 1 else c)
+    df.columns = new_cols
+
+    # SQLite cannot store dict/list; serialize object columns so INSERT doesn't fail
+    for col in df.columns:
+        if df[col].dtype == object:
+            df[col] = df[col].apply(
+                lambda x: json.dumps(x) if isinstance(x, (dict, list)) else (x if pd.notna(x) else None)
+            )
+            df[col] = df[col].astype(str).replace("nan", "")
 
     try:
         with sqlite3.connect(db) as conn:
             df.to_sql(table_name, conn, if_exists="replace", index=False)
         return json.dumps({"status": "ok", "saved_rows": int(len(df)), "table": table_name, "db": db})
     except Exception as e:
-        raise RuntimeError(f"Failed to write to sqlite: {e}") from e
+        err_msg = f"{type(e).__name__}: {e}"
+        raise RuntimeError(f"Failed to write to sqlite: {err_msg}") from e
 
 
 @mcp.tool()
