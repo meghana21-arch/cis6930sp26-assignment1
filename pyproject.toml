@@ -4,6 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cis6930sp26-assignment1"
+authors = [
+    { name = "Sai Meghana Barla" }
+]
 version = "0.1.0"
 description = "ETL pipeline: extract, transform, load incident data"
 readme = "README.md"
