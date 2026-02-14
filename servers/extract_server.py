@@ -85,9 +85,9 @@ def get_incident_types() -> List[str]:
     return [v for v in vals if v]
 
 
-@mcp.resource("schema://incidents")
+@mcp.tool()
 def get_schema() -> str:
-    """Return the schema of the incidents data (inferred from a sample)."""
+    """Return the schema of the incidents data (inferred from a sample). Returns JSON."""
     url = _endpoint()
     sample = _safe_get(url, {"$limit": 50, "$offset": 0})
     schema = _infer_schema(sample)
