@@ -136,8 +136,11 @@ def generate_summary(table_name: str) -> str:
         date_cols = [c for c in df.columns if "date" in c.lower() or "time" in c.lower()]
         summary["date_columns_detected"] = date_cols
 
-        # null rates
-        summary["null_rate_by_column"] = {c: float(df[c].isna().mean()) for c in df.columns}
+        # added checks for null rates 
+        summary["null_rate_by_column"] = {}
+        for c in df.columns:
+            v = df[c].isna().mean()
+            summary["null_rate_by_column"][c] = float(v) if pd.notna(v) else 0.0
 
         return json.dumps(summary, indent=2)
     except Exception as e:
