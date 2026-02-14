@@ -1,30 +1,32 @@
 # cis6930sp26-assignment1
 
-This project implements an ETL pipeline for Gainesville crime incident data using MCP (Model Context Protocol). The pipeline extracts data from the Socrata API, applies cleaning and transformation steps, and loads the processed results into a SQLite database. The workflow can be executed either using a rule-based planner or an LLM-driven orchestration.
-
-## Structure
-
-| Path | Description |
-|------|-------------|
-| **`servers/`** | MCP servers (tools used by the pipeline) |
-| `servers/extract_server.py` | Extract: `fetch_incidents`, `get_incident_types`, `get_schema` |
-| `servers/transform_server.py` | Transform: `clean_dates`, `categorize_incidents`, `detect_anomalies` |
-| `servers/load_server.py` | Load: `save_to_sqlite`, `query_database`, `generate_summary` |
-| **`pipeline.py`** | Orchestrator: connects to MCP servers, runs ETL (rule-based or LLM-driven) |
-| **`tests/`** | Pytest tests for each MCP server |
-| **`data/`** | Output directory; `data/incidents.db` is written here |
+ETL pipeline for Gainesville crime incident data: **Extract** (Socrata API) → **Transform** (clean, categorize, anomaly detection) → **Load** (SQLite). The pipeline is orchestrated by a rule-based planner or an LLM that decides fetch size, categories, and summary SQL.
 
 ---
 
-## Setup
+## Setup and Usage Instructions
 
-**Option A: uv (recommended)**
+### Prerequisites
+
+- **Python**: 3.10, 3.11, or 3.12
+- **Optional**: [uv](https://docs.astral.sh/uv/) for dependency management (recommended)
+- **For LLM mode only**: API key for an OpenAI-compatible service (NavigatorAI).
+- **Network**: Required for Extract (Socrata API). Tests run without network.
+
+### Clone and install
+
+```bash
+git clone <your-repo-url>
+cd cis6930sp26-assignment1
+```
+
+**With uv (recommended):**
 
 ```bash
 uv sync --extra dev
 ```
 
-**Option B: pip**
+**With pip:**
 
 ```bash
 python -m venv .venv
@@ -32,72 +34,127 @@ source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
 ```
 
-**Environment**
+**Optional environment:**
 
 ```bash
 cp .env.example .env
-# Edit .env for: GAINESVILLE_API_ENDPOINT, SQLITE_PATH, and (for LLM mode) USE_LLM, NAVIGATOR_KEY
+# add NAVIGATORAI_KEYS
 ```
 
----
+### Starting MCP servers and running the orchestration script
 
-## Usage
+You do **not** start the MCP servers by hand. The orchestration script (`pipeline.py`) starts them automatically as subprocesses and connects via MCP stdio:
 
-### Rule-based pipeline
+1. When you run `python pipeline.py` (or `uv run python pipeline.py`), it:
+   - Spawns `servers/extract_server.py`, `servers/transform_server.py`, and `servers/load_server.py` as child processes
+   - Connects to each using the MCP client (stdio transport)
+   - Calls the tools on each server in sequence (get_schema, fetch_incidents, detect_anomalies, clean_dates, categorize_incidents, save_to_sqlite, generate_summary, query_database)
 
-The ETL pipeline uses a fixed plan (fetch limit, categories, summary SQL).
+So a single command runs both “start servers” and “execute orchestration.”
+
+### Run the full pipeline end-to-end
+
+**Rule-based (default):**
 
 ```bash
 uv run python pipeline.py
 # or: python pipeline.py
 ```
 
-Output: schema, anomaly summary, save result, table summary, and SQL summary printed to stdout.
+**LLM-orchestrated (requires API key):**
 
-### LLM-orchestrated pipeline
-
-An LLM (i.e NavigatorAI) decides how much data to fetch, which categories to use, and what summary SQL to run.
-NOTE : setup this Navigator keys in the .env file
 ```bash
-# NAVIGATOR_AI_URL, NAVIGATOR_AI_API_KEY
+NAVIGATORAI_API_KEY=sk-xxxxx
 uv run python pipeline.py
 ```
 
-The LLM receives schema + a small sample + anomaly summary and returns a JSON plan; the pipeline executes that plan via the same MCP tools.
-
----
-
-## Pipeline comparison
-
-| Aspect | Rule-based | LLM-orchestrated |
-|--------|------------|------------------|
-| **Configuration** | No env vars required (defaults in code) | NavigatorAI |
-| **Plan** | Fixed: e.g. 2000 rows, categories `["violent","property","drug","traffic","other"]`, one summary SQL | LLM chooses fetch limit, categories, and summary SQL from schema + sample + anomalies |
-| **When to use** | CI, demos, reproducible runs | Exploratory runs, adaptive behavior, different summary stats per run |
-| **Failure mode** | Predictable (same steps every time) | Depends on LLM output; invalid JSON falls back to rule-based plan |
-| **MCP usage** | Same: all tool calls go through the three MCP servers | Same tools; only the *parameters* (limit, categories, SQL) come from the LLM |
-
-Both modes connect to the same Extract, Transform, and Load MCP servers and run the same sequence: get_schema → fetch_incidents → detect_anomalies → clean_dates → categorize_incidents → save_to_sqlite → generate_summary + query_database.
-
----
-
-## Tests
-
-Tests target each MCP server and run without network (except any optional integration test you add).
-
-| Server | Test file | Coverage |
-|--------|-----------|----------|
-| **Extract** | `tests/test_extract.py` | `_infer_schema`, `fetch_incidents` validation (limit/offset) |
-| **Transform** | `tests/test_transform.py` | `clean_dates`, `categorize_incidents`, `detect_anomalies` (normal + empty input, invalid input) |
-| **Load** | `tests/test_load.py` | `_loads_rows` (list, `rows` object, MCP `result` unwrap), `save_to_sqlite`, `query_database`, `generate_summary`, input validation |
-
-**Run tests**
+### Run tests
 
 ```bash
 uv run pytest tests/ -v
 # or: pytest tests/ -v
 ```
 
-CI: `.github/workflows/pytest.yml` runs pytest on push/PR (uv + `--extra dev`).
+CI runs the same via `.github/workflows/pytest.yml` on push/PR.
+
+### Expected output and how to verify success
+
+**Console output:** The pipeline prints a **PIPELINE REPORT** with:
+
+- **Schema (inferred):** endpoint, `num_fields_in_sample`, `fields`, notes
+- **Anomaly summary:** `total_rows`, `rows_with_issues`, `issue_rate`, `date_fields_checked`
+- **Saved:** `status`, `saved_rows`, `table`, `db` (e.g. `saved_rows: 2000`, `db: data/incidents.db`)
+- **Table summary:** table name, `rows_sampled_for_summary`, `columns`, `category_counts`, `date_columns_detected`, `null_rate_by_column`
+- **SQL summary:** result of the summary query (e.g. category counts)
+
+**Verification:**
+
+1. **Exit code:** Process exits with 0.
+2. **File:** `data/incidents.db` exists and is non-empty.
+3. **Report:** “Saved” shows `"status": "ok"` and `saved_rows` > 0; “Table summary” shows `rows_sampled_for_summary` > 0; “SQL summary” shows `rows` with at least one category count.
+
+---
+
+## Pipeline Comparison (MCP + LLM vs traditional)
+
+This section compares the **MCP pipeline with optional LLM orchestration** to a **traditional single-process ETL script** (e.g. one Python file that imports extract/transform/load functions and runs them in order).
+
+### Flexibility: How does the LLM handle unexpected data quality issues?
+
+- **Traditional:** Logic is fixed in code (e.g. always fetch 2000 rows, same categories). Handling new data issues requires code changes.
+- **This pipeline:** The LLM receives schema + a sample + an **anomaly summary** (from the `detect_anomalies` tool). It can respond in the **plan** (e.g. lower `fetch_limit` if anomalies are high, or keep defaults). The pipeline does not today let the LLM add new transformation steps on the fly; it only chooses parameters (fetch limit, categories, summary SQL). So flexibility is in **parameter choice** based on data quality, not in changing the set of tools or steps.
+
+### Transparency: Can you understand why the LLM made certain decisions?
+
+- **Traditional:** Decisions are explicit in code (e.g. constants and conditionals).
+- **This pipeline:** When `USE_LLM=1`, the LLM is prompted to return a **reasoning** field in its JSON plan. That string is printed as `[LLM reasoning]` before the report, so you can see the model’s stated rationale. The plan itself (fetch_limit, categories, summary_sql) is also visible in the code path that executes it. So transparency is via the optional reasoning text and the fixed, readable orchestration flow.
+
+### Reliability: Did the LLM ever make mistakes? How did you handle them?
+
+- **Possible mistakes:** The LLM might return invalid JSON, omit required keys, or suggest values that break constraints (e.g. negative limit).
+- **Handling:** (1) The pipeline parses the LLM response with a **fallback**: if the string is empty, contains “unknown tool”/“error”, or is not valid JSON, it uses the **rule-based plan** instead.
+- (2) Tool calls still go through the same MCP tools, which validate inputs (e.g. `fetch_incidents` raises `ValueError` for bad limit/offset). So a bad plan can cause a tool error but not silent wrong behavior; and many LLM output failures fall back to the rule-based plan so the pipeline still completes.
+
+### Performance: Execution time and token usage
+
+- **Execution time:** The MCP pipeline is slower than a traditional in-process script because:
+- (1) three server processes are started and communicated with over stdio;
+- (2) each tool call is a round-trip (request/response). A traditional script would do the same work with in-process function calls and no serialization.
+- **LLM mode** adds one HTTP request to the LLM API (and optionally a small sample fetch + anomaly run) before the main fetch; so it’s slightly slower than rule-based MCP, but the dominant cost is still the MCP tool calls and the Socrata fetch.
+- **Token usage (LLM mode only):** One request per run: the prompt includes schema (truncated), a sample (truncated), and anomaly summary; the model returns a short JSON plan and optional reasoning. So token usage is on the order of a few hundred to low thousands of tokens per run, depending on model and truncation.
+
+---
+
+## Bugs and Assumptions
+
+**Assumptions:**
+
+- Socrata API returns a JSON array (or we treat it as such) and remains available at the default endpoint.
+- Extract/transform/load servers are run from the **project root** (pipeline sets `cwd` so `data/incidents.db` and relative paths resolve correctly).
+- LLM response, when used, is JSON with at least `fetch_limit`, `fetch_offset`, `categories`, and optionally `table_name`, `summary_sql`, `reasoning`; missing optional fields are defaulted in code.
+- Column names from the API (e.g. `:@computed_region_*`) are sanitized for SQLite (no `:`, `@`); object/dict columns are serialized to strings so SQLite INSERT succeeds.
+
+**Known limitations:**
+
+- Transform categorization is keyword-based (regex on a single text field); the LLM does not redefine the categorization logic, only the category list.
+- Pipeline does not retry on transient API or LLM failures.
+- `generate_summary` uses a 20,000-row cap for the sample; very large tables are summarized from a subset.
+
+**Known bugs:**
+
+- None currently. If you find issues (e.g. on a specific Python or OS version), document them here.
+
+---
+
+## Project structure
+
+| Path | Description |
+|------|-------------|
+| `servers/extract_server.py` | MCP Extract: `fetch_incidents`, `get_incident_types`, `get_schema` |
+| `servers/transform_server.py` | MCP Transform: `clean_dates`, `categorize_incidents`, `detect_anomalies` |
+| `servers/load_server.py` | MCP Load: `save_to_sqlite`, `query_database`, `generate_summary` |
+| `pipeline.py` | Orchestrator: connects to MCP servers, runs ETL (rule-based or LLM plan) |
+| `tests/` | Pytest tests per server (`test_extract.py`, `test_transform.py`, `test_load.py`) |
+| `data/` | Output directory; `data/incidents.db` is written here |
 
 ---
