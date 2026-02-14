@@ -1,0 +1,144 @@
+=== PIPELINE REPORT ===
+Schema (inferred):
+{
+  "endpoint": "https://data.cityofgainesville.org/resource/gvua-xt9q.json",
+  "num_fields_in_sample": 22,
+  "fields": [
+    ":@computed_region_43jd_v64e",
+    ":@computed_region_4rat_gsiv",
+    ":@computed_region_9cfm_spy5",
+    ":@computed_region_axii_i744",
+    ":@computed_region_e6r8_dw75",
+    ":@computed_region_ecgy_hwrz",
+    ":@computed_region_ndi2_bfht",
+    ":@computed_region_u9vc_vmbc",
+    "address",
+    "city",
+    "id",
+    "latitude",
+    "location",
+    "longitude",
+    "narrative",
+    "offense_date",
+    "offense_day_of_week",
+    "offense_hour_of_day",
+    "report_date",
+    "report_day_of_week",
+    "report_hour_of_day",
+    "state"
+  ],
+  "notes": "Schema is inferred from a sample because Socrata metadata may vary."
+} ...
+
+Anomaly summary:
+{
+  "total_rows": 2000,
+  "rows_with_issues": 0,
+  "issue_rate": 0.0,
+  "date_fields_checked": [
+    "report_date",
+    "offense_date"
+  ]
+} 
+
+Saved:
+{
+  "status": "ok",
+  "saved_rows": 2000,
+  "table": "incidents_processed",
+  "db": "data/incidents.db"
+} 
+
+Table summary:
+{
+  "table": "incidents_processed",
+  "rows_sampled_for_summary": 2000,
+  "columns": [
+    "id",
+    "narrative",
+    "report_date",
+    "offense_date",
+    "report_hour_of_day",
+    "report_day_of_week",
+    "offense_hour_of_day",
+    "offense_day_of_week",
+    "city",
+    "state",
+    "address",
+    "latitude",
+    "longitude",
+    "location",
+    "computed_region_43jd_v64e",
+    "computed_region_ndi2_bfht",
+    "computed_region_ecgy_hwrz",
+    "computed_region_e6r8_dw75",
+    "computed_region_axii_i744",
+    "computed_region_u9vc_vmbc",
+    "computed_region_4rat_gsiv",
+    "category",
+    "computed_region_9cfm_spy5"
+  ],
+  "category_counts": {
+    "other": 2000
+  },
+  "date_columns_detected": [
+    "report_date",
+    "offense_date"
+  ],
+  "null_rate_by_column": {
+    "id": 0.0,
+    "narrative": 0.0,
+    "report_date": 0.0,
+    "offense_date": 0.0,
+    "report_hour_of_day": 0.0,
+    "report_day_of_week": 0.0,
+    "offense_hour_of_day": 0.0,
+    "offense_day_of_week": 0.0,
+    "city": 0.0,
+    "state": 0.0,
+    "address": 0.0,
+    "latitude": 0.0125,
+    "longitude": 0.0125,
+    "location": 0.0135,
+    "computed_region_43jd_v64e": 0.0475,
+    "computed_region_ndi2_bfht": 0.0145,
+    "computed_region_ecgy_hwrz": 0.0145,
+    "computed_region_e6r8_dw75": 0.016,
+    "computed_region_axii_i744": 0.036,
+    "computed_region_u9vc_vmbc": 0.0145,
+    "computed_region_4rat_gsiv": 0.0135,
+    "category": 0.0,
+    "computed_region_9cfm_spy5": 0.6355
+  }
+} 
+
+SQL summary:
+{"columns": ["category", "n"], "rows": [{"category": "other", "n": 2000}]} 
+
+
+====================================== test session starts ======================================
+platform darwin -- Python 3.12.7, pytest-9.0.2, pluggy-1.6.0 -- /Users/saiannam/meghana/cis6930sp26-assignment1/.venv/bin/python3
+cachedir: .pytest_cache
+rootdir: /Users/saiannam/meghana/cis6930sp26-assignment1
+configfile: pyproject.toml
+plugins: anyio-4.12.1
+collected 16 items                                                                              
+
+tests/test_extract.py::test_infer_schema PASSED                                           [  6%]
+tests/test_extract.py::test_fetch_incidents_validates_limit PASSED                        [ 12%]
+tests/test_extract.py::test_fetch_incidents_validates_offset PASSED                       [ 18%]
+tests/test_load.py::test_loads_rows_accepts_list PASSED                                   [ 25%]
+tests/test_load.py::test_loads_rows_accepts_rows_object PASSED                            [ 31%]
+tests/test_load.py::test_loads_rows_unwraps_result PASSED                                 [ 37%]
+tests/test_load.py::test_save_and_query PASSED                                            [ 43%]
+tests/test_load.py::test_save_to_sqlite_rejects_empty_table_name PASSED                   [ 50%]
+tests/test_load.py::test_query_database_rejects_empty_sql PASSED                          [ 56%]
+tests/test_transform.py::test_clean_dates PASSED                                          [ 62%]
+tests/test_transform.py::test_clean_dates_empty_rows PASSED                               [ 68%]
+tests/test_transform.py::test_categorize PASSED                                           [ 75%]
+tests/test_transform.py::test_categorize_default_categories PASSED                        [ 81%]
+tests/test_transform.py::test_detect_anomalies PASSED                                     [ 87%]
+tests/test_transform.py::test_detect_anomalies_empty_rows PASSED                          [ 93%]
+tests/test_transform.py::test_invalid_input_raises PASSED                                 [100%]
+
+====================================== 16 passed in 0.57s =======================================
