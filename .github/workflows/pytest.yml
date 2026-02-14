@@ -1,31 +1,27 @@
-[build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
+name: pytest
 
-[project]
-name = "cis6930sp26-assignment1"
-authors = [
-    { name = "Sai Meghana Barla" }
-]
-version = "0.1.0"
-description = "ETL pipeline: extract, transform, load incident data"
-readme = "README.md"
-requires-python = ">=3.10"
-dependencies = [
-    "mcp>=1.0.0",
-    "pandas>=2.0.0",
-    "requests>=2.28.0",
-]
+on:
+  push:
+  pull_request:
 
-[project.optional-dependencies]
-dev = [
-    "pytest>=7.0",
-]
+jobs:
+  test:
+    runs-on: ubuntu-latest
 
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["servers*"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-pythonpath = ["."]
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run tests
+        run: uv run pytest -v
