@@ -11,10 +11,8 @@ mcp = FastMCP("GainesvilleExtractServer")
 
 DEFAULT_ENDPOINT = "https://data.cityofgainesville.org/resource/gvua-xt9q.json"
 
-
 def _endpoint() -> str:
     return os.getenv("GAINESVILLE_API_ENDPOINT", DEFAULT_ENDPOINT).strip()
-
 
 def _safe_get(url: str, params: Dict[str, Any]) -> List[Dict[str, Any]]:
     try:
@@ -32,14 +30,12 @@ def _safe_get(url: str, params: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 def _infer_schema(sample: List[Dict[str, Any]]) -> Dict[str, Any]:
     keys = sorted({k for row in sample for k in row.keys()})
-    # very light “schema-ish” info
     return {
         "endpoint": _endpoint(),
         "num_fields_in_sample": len(keys),
         "fields": keys,
         "notes": "Schema is inferred from a sample because Socrata metadata may vary.",
     }
-
 
 @mcp.tool()
 def fetch_incidents(limit: int = 100, offset: int = 0) -> str:
@@ -48,19 +44,27 @@ def fetch_incidents(limit: int = 100, offset: int = 0) -> str:
         raise ValueError("limit must be between 1 and 50000")
     if offset < 0:
         raise ValueError("offset must be >= 0")
-
-    url = _endpoint()
-    params = {"$limit": limit, "$offset": offset}
-    rows = _safe_get(url, params)
-    return json.dumps({"rows": rows, "limit": limit, "offset": offset})
+    try:
+        url = _endpoint()
+        params = {"$limit": limit, "$offset": offset}
+        rows = _safe_get(url, params)
+        return json.dumps({"rows": rows, "limit": limit, "offset": offset})
+    except (RuntimeError, ValueError) as e:
+        raise
+    except Exception as e:
+        raise RuntimeError(f"fetch_incidents failed: {e}") from e
 
 
 @mcp.tool()
 def get_incident_types() -> List[str]:
-    """Get a list of unique incident types in the dataset (best-effort)."""
-    # Pull a decent sample and infer which field looks like “type”
-    url = _endpoint()
-    rows = _safe_get(url, {"$limit": 5000, "$offset": 0})
+    """Get a list of unique incident types in the dataset."""
+    try:
+        url = _endpoint()
+        rows = _safe_get(url, {"$limit": 5000, "$offset": 0})
+    except (RuntimeError, ValueError) as e:
+        raise
+    except Exception as e:
+        raise RuntimeError(f"get_incident_types failed: {e}") from e
     if not rows:
         return []
 
@@ -77,7 +81,6 @@ def get_incident_types() -> List[str]:
 
     field = next((f for f in candidate_fields if f in rows[0]), None)
     if field is None:
-        # fallback: pick a string-ish field with many uniques
         keys = list(rows[0].keys())
         field = keys[0]
 
@@ -88,10 +91,15 @@ def get_incident_types() -> List[str]:
 @mcp.tool()
 def get_schema() -> str:
     """Return the schema of the incidents data (inferred from a sample). Returns JSON."""
-    url = _endpoint()
-    sample = _safe_get(url, {"$limit": 50, "$offset": 0})
-    schema = _infer_schema(sample)
-    return json.dumps(schema, indent=2)
+    try:
+        url = _endpoint()
+        sample = _safe_get(url, {"$limit": 50, "$offset": 0})
+        schema = _infer_schema(sample)
+        return json.dumps(schema, indent=2)
+    except (RuntimeError, ValueError) as e:
+        raise
+    except Exception as e:
+        raise RuntimeError(f"get_schema failed: {e}") from e
 
 
 if __name__ == "__main__":
