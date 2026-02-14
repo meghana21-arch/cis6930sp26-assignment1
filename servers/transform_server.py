@@ -9,7 +9,6 @@ from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP("GainesvilleTransformServer")
 
-
 def _loads_rows(data: str) -> List[Dict[str, Any]]:
     obj = json.loads(data)
     if isinstance(obj, dict) and "rows" in obj and isinstance(obj["rows"], list):
@@ -27,7 +26,6 @@ def _dumps_rows(rows: List[Dict[str, Any]], meta: Dict[str, Any] | None = None) 
 
 
 def _find_date_fields(sample_row: Dict[str, Any]) -> List[str]:
-    # standardize any key containing “date” or “time”
     date_like = []
     for k in sample_row.keys():
         lk = k.lower()
@@ -50,16 +48,13 @@ def _choose_text_field(row: Dict[str, Any]) -> Tuple[str | None, str]:
     for c in candidates:
         if c in row and row.get(c):
             return c, str(row.get(c))
-    # fallback: first non-empty string value
     for k, v in row.items():
         if isinstance(v, str) and v.strip():
             return k, v
     return None, ""
 
-
 @mcp.tool()
 def clean_dates(data: str) -> str:
-    """Parse and standardize date fields to ISO-8601 strings when possible."""
     rows = _loads_rows(data)
     if not rows:
         return _dumps_rows(rows, {"clean_dates": {"date_fields": [], "changed": 0}})
@@ -94,7 +89,6 @@ def categorize_incidents(data: str, categories: List[str]) -> str:
     if not cats:
         cats = ["violent", "property", "drug", "traffic", "other"]
 
-    # simple keyword rules (you can improve later)
     keyword_map = {
         "violent": [r"\bassault\b", r"\bbattery\b", r"\brobbery\b", r"\bweapon\b", r"\bhomicide\b"],
         "property": [r"\btheft\b", r"\bburglary\b", r"\blarceny\b", r"\bvandal\b", r"\bstolen\b"],
@@ -115,7 +109,6 @@ def categorize_incidents(data: str, categories: List[str]) -> str:
                 label = k
                 break
 
-        # respect user-provided categories if they differ
         if label not in cats:
             label = "other" if "other" in cats else cats[-1]
 
@@ -134,14 +127,11 @@ def detect_anomalies(data: str) -> str:
 
     anomalies = []
     total = len(rows)
-
-    # date parsing check
     date_fields = _find_date_fields(rows[0])
 
     for i, r in enumerate(rows):
         issues = []
-
-        # missing type/text
+        
         _, text = _choose_text_field(r)
         if not text.strip():
             issues.append("missing_incident_text/type")
@@ -182,7 +172,7 @@ def detect_anomalies(data: str) -> str:
             "issue_rate": round(len(anomalies) / total * 100, 2),
             "date_fields_checked": date_fields,
         },
-        "anomalies": anomalies[:50],  # cap to keep output readable
+        "anomalies": anomalies[:50],  
         "note": "Only first 50 anomaly rows returned; summary reflects full scan of provided data.",
     }
     return json.dumps(report)
